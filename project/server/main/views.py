@@ -4,6 +4,7 @@ from rq import Queue, Connection
 from flask import render_template, Blueprint, jsonify, request, current_app
 
 from project.server.main.orcid import get_links_from_orcid
+from project.server.main.tasks import create_task_dois
 from project.server.main.utils_swift import download_object
 
 main_blueprint = Blueprint("main", __name__,)
@@ -37,6 +38,10 @@ def run_task_download():
             with Connection(redis.from_url(current_app.config["REDIS_URL"])):
                 q = Queue("harvest-orcid", default_timeout=216000)
                 task = q.enqueue(get_links_from_orcid, orcid, person_id, orcid )
+    if args.get('dois'):
+        with Connection(redis.from_url(current_app.config["REDIS_URL"])):
+            q = Queue("harvest-orcid", default_timeout=216000)
+            task = q.enqueue(create_task_dois, args)
     response_object = {
         "status": "success",
         "data": {

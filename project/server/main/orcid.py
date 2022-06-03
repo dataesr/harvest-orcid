@@ -3,6 +3,7 @@ import datetime
 import os
 import requests
 import json
+import re
 import pandas as pd
 from project.server.main.logger import get_logger
 from project.server.main.utils_swift import upload_object
@@ -17,15 +18,14 @@ payload_token = {'client_id': os.getenv('ORCID_CLIENT_ID'),
 
 os.system('mkdir -p /upw_data/links_publications_persons')
 
+DOI_PREFIX = re.compile("(10\.)(.*?)( |$)")
 def clean_doi(doi):
-    res = doi.lower().replace(' ', '').strip()
+    res = doi.lower().strip()
     res = res.replace('%2f', '/')
-    res = res.replace('doi:', '')
-    for f in [',', ';', ' ']:
-        res = res.replace(f, '')
-    if 'doi.org' in doi:
-        res = re.sub('(.*)?doi.org/', '', res)
-    return res.strip()
+    doi_match = DOI_PREFIX.search(res)
+    if doi_match:
+        return doi_match.group().strip()
+    return None
 
 def get_header():
     post_request_token = requests.post("https://orcid.org/oauth/token", data = payload_token, headers=headers_token)
@@ -68,17 +68,19 @@ def get_publications(orcid, record, person_id):
         for id_type in ['doi', 'hal']:
             if id_type in ext_map:
                 if id_type == 'doi':
-                    publication_id = 'doi' + clean_doi(ext_map[id_type])
+                    doi_clean = clean_doi(ext_map[id_type])
+                    if doi_clean:
+                        publication_id = 'doi' + clean_doi(ext_map[id_type])
                 else:
                     publication_id = f'{id_type}{ext_map[id_type]}'
                 break
         if publication_id is None:
-            if len(w['external-ids']['external-id']) == 0: # no identifier
-                publication_id = 'orcid'+w['work-summary'][0]['path']
-            else:
+            if len(w['external-ids']['external-id']) > 0 and w['external-ids']['external-id'][0]['external-id-type'] != 'doi':
                 id_type = w['external-ids']['external-id'][0]['external-id-type']
                 id_value = w['external-ids']['external-id'][0]['external-id-value'].lower().strip()
                 publication_id = f'{id_type}{ext_map[id_type]}'
+            else: # no identifier
+                publication_id = 'orcid'+w['work-summary'][0]['path']
         new_elt = elt.copy()
         new_elt['publi_id'] = publication_id
         publi_author_link.append(new_elt)
