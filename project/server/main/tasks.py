@@ -23,10 +23,19 @@ def to_json(input_list, output_file, ix):
             json.dump(entry, outfile)
 
 def create_task_dois(arg):
-    cmd = 'echo doi > /upw_data/dois_from_orcid.csv'
-    cmd += " && cat /upw_data/links_publications_persons/links_orcid* | jq -r .publi_id | grep '^doi10.' | grep -v ',' | cut -c 4- | sort -u >> /upw_data/dois_from_orcid.csv"
+    cmd1 = 'echo doi > /upw_data/dois_from_orcid.csv'
+    os.system(cmd1)
+    cmd2 = 'rm -rf /upw_data/orcid_idref.jsonl'
+    os.system(cmd2)
+
+    for i1 in range(0, 10):
+        for i2 in range(0, 10):
+            for i3 in range(0, 10):
+                cmd1 = f"cat /upw_data/links_publications_persons/links_orcid0000-00{i1}{i2}-{i3}* | jq -r .publi_id | grep '^doi10.' | grep -v ',' | cut -c 4- | sort -u >> /upw_data/dois_from_orcid.csv"
+                os.system(cmd1)
+                cmd2 = f"cat /upw_data/links_publications_persons/links_orcid0000-00{i1}{i2}-{i3}* >> /upw_data/orcid_idref.jsonl"
+                os.system(cmd2)
     logger.debug('getting dois from orcid links')
-    os.system(cmd)
     output_file = '/upw_data/dois_from_orcid.json'
     df = pd.read_csv('/upw_data/dois_from_orcid.csv', chunksize = 20000)
     ix = 0
@@ -37,6 +46,4 @@ def create_task_dois(arg):
     with open(output_file, 'a') as outfile:
         outfile.write(']')
     upload_object('publications-related', output_file, f'dois_from_orcid.json')
-    cmd = "cat /upw_data/links_publications_persons/links_orcid* > /upw_data/orcid_idref.jsonl"
-    os.system(cmd)
     upload_object('misc', '/upw_data/orcid_idref.jsonl', f'orcid_idref.jsonl')
