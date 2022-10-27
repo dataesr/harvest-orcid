@@ -8,21 +8,28 @@ from project.server.main.logger import get_logger
 
 logger = get_logger(__name__)
 
-def parse_all(base_path, filter_fr = True):
+FRENCH_ALPHA2 = ['fr', 'gp', 'gf', 'mq', 're', 'yt', 'pm', 'mf', 'bl', 'wf', 'tf', 'nc', 'pf']
+
+def parse_all(base_path, dump_year, filter_fr = True):
     logger.debug(f'parsing {base_path} files')
     orcids_info = []
     ix = 0
     for notice in os.listdir(base_path):
         try:
-            parsed = parse_notice(notice, base_path)
-            if filter_fr and "FR" not in (parsed['previous_countries'] + parsed['current_countries']):
+            parsed = parse_notice(notice, base_path, dump_year)
+            is_fr =  parsed['is_fr']
+            if filter_fr and not is_fr:
                 continue
+            if is_fr:
+                logger.debug(parsed)
             orcids_info.append(parsed)
             ix += 1
         except:
-            logger.debug("error reading "+notice)
+            pass
+            #logger.debug("error reading "+notice)
     df = pd.DataFrame(orcids_info)
-    filename = base_path.split('/')[-1]
+    filename = base_path.split('/')[-2]
+    logger.debug(f'{len(orcids_info)} french orcids in {filename}')
     df.to_json(f'{base_path}/{filename}.jsonl', lines=True, orient='records')
     return df
 
@@ -31,104 +38,125 @@ def get_soup(notice_path, base_path):
     soup = BeautifulSoup(open(base_path+notice_path, 'r'), 'lxml')
     return soup
     
-def parse_notice(notice_path, base_path, verbose = False):
-    
+def parse_notice(notice_path, base_path, dump_year, verbose = False):
+    res = {} 
     soup = get_soup(notice_path, base_path)
-    creation_date = soup.find("history:submission-date").text[0:10]
     orcid = notice_path.split('.')[0]
-    
+    res['orcid'] = orcid 
+    creation_date = soup.find("history:submission-date").text[0:10]
+    res['creation_date'] = creation_date 
     first_name, last_name, current_address = None, None, None
     
     name1 = soup.find("personal-details:given-names")
     if name1:
         first_name = name1.text
+        res['first_name'] = first_name
     
     name2 = soup.find("personal-details:family-name")
     if name2:
         last_name = name2.text
+        res['last_name'] = last_name
     
     country = soup.find("address:country")
     if country:
         current_address = country.text
-        
-    employments = get_employment_countries(soup)
-    educations = get_education_countries(soup)
+        res['current_address_country'] = current_address
+       
+    employments_elt = soup.find("activities:employments")
+    if employments_elt:
+        employments = parse_activities(employments_elt, 'employment', dump_year)
+        res.update(employments)
+    educations_elt = soup.find("activities:educations")
+    if educations_elt:
+        educations = parse_activities(educations_elt, 'education', dump_year)
+        res.update(educations)
     
-    current_fr = False
+    is_fr = False
+    is_fr_present = False
     fr_reasons = []
-    if current_address == "FR":
-        current_fr = True
+    if isinstance(current_address, str) and current_address.lower() in FRENCH_ALPHA2:
+        is_fr = True
+        is_fr_present = True
         fr_reasons.append("address")
-        
-    if "FR" in employments["current_countries"]:
-        current_fr = True
-        fr_reasons.append("employments")
-        
-    if "FR" in educations["current_countries"] :
-        current_fr = True
-        fr_reasons.append("educations")
-        
+
+    for a in res.get('employment_present', []):
+        if a.get('country') in FRENCH_ALPHA2:
+            is_fr = True
+            is_fr_present = True
+            fr_reasons.append('employment')
+    
+    for a in res.get('education_present', []):
+        if a.get('country') in FRENCH_ALPHA2:
+            is_fr = True
+            is_fr_present = True
+            fr_reasons.append('education')
+    
+    for a in res.get('employment_other', []) + res.get('education_other', []):
+        if a.get('country') in FRENCH_ALPHA2:
+            is_fr = True
+    fr_reasons = list(set(fr_reasons)) 
     fr_reasons.sort()
-    current_countries = employments["current_countries"] + educations["current_countries"]
-    if current_address:
-        current_countries.append(current_address)
-    return {
-        "orcid": orcid,
-        "creation_date": creation_date,
-        "first_name": first_name,
-        "last_name": last_name,
-        "current_address_country": current_address,
-        "previous_countries_employment": employments["previous_countries"],
-        "current_countries_employment": employments["current_countries"],
-        "previous_countries_education": educations["previous_countries"],
-        "current_countries_education": educations["current_countries"],
-        "current_countries": list(set(current_countries)),
-        "previous_countries": list(set(employments["previous_countries"] + educations["previous_countries"])),
-        "fr_reason": fr_reasons
-    }
 
-def get_employment_countries(soup):
-    employments = soup.find("activities:employments")
-    current_countries = []
-    previous_countries = []
-    for c in employments.children:
-        if not isinstance(c, bs4.element.Tag):
-            continue
+    res['fr_reasons'] = fr_reasons
+    res['is_fr'] = is_fr
+    res['is_fr_present'] = is_fr_present
+    return res
 
-        country = c.find('common:country')
-        if country is None:
-            continue
+def parse_date(x):
+    year, month, day = None, None, None
+    try:
+        year = x.find('common:year').get_text()
+    except:
+        return None
+    try:
+        month = x.find('common:month').get_text()
+    except:
+        month = '01'
+    try:
+        day = x.find('common:day').get_text()
+    except:
+        day = '01'
+    return f'{year}-{month}-{day}'
 
-        end_date = c.find("common:end-date")
-        if end_date:
-            end_str = end_date.text.strip()
-            previous_countries.append(country.text)
+def parse_organization(x):
+    res = {}
+    for f in ['name', 'city', 'country']:
+        elt = x.find(f'common:{f}')
+        if elt:
+            res[f] = elt.get_text()
+            if f in ['country'] and res[f]:
+                res[f] = res[f].lower()
+    for f in x.find_all('common:disambiguated-organization'):
+        source = f.find('common:disambiguation-source').get_text().lower()
+        value = f.find('common:disambiguated-organization-identifier').get_text()
+        res[source] = value
+    return res
+
+def parse_activities(x, activity, dump_year):
+    dump_date = f'{dump_year}-11-25'
+    present, other = [], []
+    for r in x.find_all(f'{activity}:{activity}-summary'):
+        start_date_elt = r.find(f'common:start-date')
+        end_date_elt = r.find(f'common:end-date')
+        start_date, end_date = None, None
+        if start_date_elt:
+            start_date = parse_date(start_date_elt)
+        if end_date_elt:
+            end_date = parse_date(end_date_elt)
+        is_current=False
+        if (end_date is None or end_date > dump_date) and (start_date is None or start_date < dump_date):
+            is_current = True
+        for org_elt in r.find_all('common:organization'):
+            org = parse_organization(org_elt)
+            org['is_current'] = is_current
+            if start_date:
+                org['start_date'] = start_date
+            if end_date:
+                org['end_date'] = end_date
+        if is_current:
+            if org not in present:
+                present.append(org)
         else:
-            current_countries.append(country.text)
-
-    return {"previous_countries": list(set(previous_countries)), 
-            "current_countries": list(set(current_countries))
-           }
-
-def get_education_countries(soup):
-    educations = soup.find("activities:educations")
-    current_educations = []
-    previous_educations = []
-    for c in educations.children:
-        if not isinstance(c, bs4.element.Tag):
-            continue
-
-        country = c.find('common:country')
-        if country is None:
-            continue
-
-        end_date = c.find("common:end-date")
-        if end_date:
-            end_str = end_date.text.strip()
-            previous_educations.append(country.text)
-        else:
-            current_educations.append(country.text)
-
-    return {"previous_countries": list(set(previous_educations)), 
-            "current_countries": list(set(current_educations))
-           }
+            if org not in other:
+                other.append(org)
+    return {f'{activity}_present': present, f'{activity}_other': other}

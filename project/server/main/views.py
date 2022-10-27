@@ -37,6 +37,8 @@ def run_task_public_dump():
             return jsonify(response_object), 202
     if args.get('parse') and args.get('filename'):
         filename = args.get('filename')
+        dump_year = filename.split('_')[1]
+        logger.debug(f'dump year = {dump_year}')
         prefixes = []
         for a in list(string.digits):
             for b in list(string.digits):
@@ -46,7 +48,7 @@ def run_task_public_dump():
         for prefix in prefixes:
             with Connection(redis.from_url(current_app.config["REDIS_URL"])):
                 q = Queue("harvest-orcid", default_timeout=216000)
-                task = q.enqueue(parse_all, f'{MOUNTED_VOLUME}{filename}/{prefix}/', True)
+                task = q.enqueue(parse_all, f'{MOUNTED_VOLUME}{filename}/{prefix}/', dump_year, True)
                 response_object = {
                     "status": "success",
                     "data": {
