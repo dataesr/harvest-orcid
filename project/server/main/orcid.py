@@ -93,4 +93,4 @@ def get_links_from_orcid(record, person_id, orcid):
     links = get_publications(orcid, record, person_id)
     logger.debug(f'{len(links)} links for orcid {orcid} ({person_id})')
     pd.DataFrame(links).to_json(f'/upw_data/links_publications_persons/links_orcid{orcid}.jsonl', lines=True, orient='records')
-    #upload_object('misc', f'links_orcid{orcid}.jsonl', f'links_publications_persons/links_orcid{orcid}.jsonl')
+    upload_object('misc', f'links_orcid{orcid}.jsonl', f'links_publications_persons/links_orcid{orcid}.jsonl')
