@@ -1,12 +1,12 @@
 import redis
-import string
 import pandas as pd
 from rq import Queue, Connection
 from flask import render_template, Blueprint, jsonify, request, current_app
 
 from project.server.main.orcid import get_links_from_orcid
-from project.server.main.tasks import create_task_dois, create_task_public_dump
+from project.server.main.tasks import create_task_dois, create_task_public_dump, create_task_load
 from project.server.main.utils_swift import download_object
+from project.server.main.utils import get_orcid_prefix
 from project.server.main.parse import parse_all
 
 main_blueprint = Blueprint("main", __name__,)
@@ -39,12 +39,7 @@ def run_task_public_dump():
         filename = args.get('filename')
         dump_year = filename.split('_')[1]
         logger.debug(f'dump year = {dump_year}')
-        prefixes = []
-        for a in list(string.digits):
-            for b in list(string.digits):
-                for c in list(string.digits)+['X']:
-                    prefix = f'{a}{b}{c}'
-                    prefixes.append(prefix)
+        prefixes = get_orcid_prefix()
         for prefix in prefixes:
             with Connection(redis.from_url(current_app.config["REDIS_URL"])):
                 q = Queue("harvest-orcid", default_timeout=216000)
@@ -56,6 +51,17 @@ def run_task_public_dump():
                     }
                 }
         return jsonify(response_object), 202
+    if args.get('load'):
+        with Connection(redis.from_url(current_app.config["REDIS_URL"])):
+            q = Queue("harvest-orcid", default_timeout=216000)
+            task = q.enqueue(create_task_load, args)
+            response_object = {
+                "status": "success",
+                "data": {
+                    "task_id": task.get_id()
+                }
+            }
+            return jsonify(response_object), 202
 
 @main_blueprint.route("/publications", methods=["POST"])
 def run_task_download():

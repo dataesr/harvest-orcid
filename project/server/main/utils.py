@@ -5,14 +5,32 @@ import re
 import requests
 import shutil
 import json
+import string
 
 from typing import Union
+from dateutil import parser
 
 from project.server.main.logger import get_logger
 
 logger = get_logger(__name__)
 
 MOUNTED_VOLUME = '/upw_data/'
+
+def get_date(x):
+    try:
+        d = parser.parse(x)
+    except:
+        d = parser.parse(x[0:8]+'01')
+    return d.isoformat()[0:10]
+
+def get_orcid_prefix():
+    prefixes = []
+    for a in list(string.digits):
+        for b in list(string.digits):
+            for c in list(string.digits)+['X']:
+                prefix = f'{a}{b}{c}'
+                prefixes.append(prefix)
+    return prefixes
 
 def get_filename_from_cd(cd: str) -> Union[str, None]:
     """ Get filename from content-disposition """

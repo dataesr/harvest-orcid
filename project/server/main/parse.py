@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 import os
 import lxml
 
+from project.server.main.utils import get_date
 from project.server.main.logger import get_logger
 
 logger = get_logger(__name__)
@@ -44,7 +45,8 @@ def parse_notice(notice_path, base_path, dump_year, verbose = False):
     orcid = notice_path.split('.')[0]
     res['orcid'] = orcid 
     creation_date = soup.find("history:submission-date").text[0:10]
-    res['creation_date'] = creation_date 
+    res['creation_date'] = creation_date
+    res['creation_year'] = creation_date[0:4]
     first_name, last_name, current_address = None, None, None
     
     name1 = soup.find("personal-details:given-names")
@@ -116,7 +118,7 @@ def parse_date(x):
         day = x.find('common:day').get_text()
     except:
         day = '01'
-    return f'{year}-{month}-{day}'
+    return get_date(f'{year}-{month}-{day}')
 
 def parse_organization(x):
     res = {}
@@ -151,8 +153,10 @@ def parse_activities(x, activity, dump_year):
             org['is_current'] = is_current
             if start_date:
                 org['start_date'] = start_date
+                org['start_year'] = start_date[0:4]
             if end_date:
                 org['end_date'] = end_date
+                org['end_year'] = end_date[0:4]
         if is_current:
             if org not in present:
                 present.append(org)

@@ -1,14 +1,22 @@
 import time
+import string
 import datetime
 import os
 import requests
 import json
 import pandas as pd
+from urllib import parse
 from project.server.main.utils_swift import upload_object
+from project.server.main.utils import get_orcid_prefix
 from project.server.main.public_dump import download_dump
+from project.server.main.elastic import reset_index
 from project.server.main.logger import get_logger
 
 logger = get_logger(__name__)
+
+ES_LOGIN_BSO_BACK = os.getenv('ES_LOGIN_BSO_BACK', '')
+ES_PASSWORD_BSO_BACK = os.getenv('ES_PASSWORD_BSO_BACK', '')
+ES_URL = os.getenv('ES_URL', 'http://localhost:9200')
 
 def to_json(input_list, output_file, ix):
     if ix == 0:
@@ -22,6 +30,32 @@ def to_json(input_list, output_file, ix):
             if ix + jx != 0:
                 outfile.write(',\n')
             json.dump(entry, outfile)
+
+def concat_results(dump_year):
+    logger.debug('concat all files into one')
+    filename = f'/upw_data/ORCID_{dump_year}_10_summaries/results.jsonl'
+    os.system(f'rm -rf {filename}')
+    for prefix in get_orcid_prefix():
+        cmd = f'cat /upw_data/ORCID_{dump_year}_10_summaries/{prefix}/{prefix}.jsonl >> {filename}'
+        os.system(cmd)
+
+def import_es(dump_year, index_name):
+    input_file = f'/upw_data/ORCID_{dump_year}_10_summaries/results.jsonl'
+    es_url_without_http = ES_URL.replace('https://','').replace('http://','')
+    es_host = f'https://{ES_LOGIN_BSO_BACK}:{parse.quote(ES_PASSWORD_BSO_BACK)}@{es_url_without_http}'
+    logger.debug('loading bso-orcid index')
+    reset_index(index=index_name)
+    elasticimport = f"elasticdump --input={input_file} --output={es_host}{index_name} --type=data --limit 1000 " + "--transform='doc._source=Object.assign({},doc)'"
+    # logger.debug(f'{elasticimport}')
+    logger.debug('starting import in elastic')
+    os.system(elasticimport)
+
+def create_task_load(arg):
+    dump_year = arg.get('dump_year')
+    index_name = arg.get('index_name')
+    if arg.get('concat'):
+        concat_results(dump_year)
+    import_es(dump_year, index_name)
 
 def create_task_dois(arg):
     cmd2 = 'rm -rf /upw_data/orcid_tmp.jsonl'
@@ -58,5 +92,4 @@ def create_task_public_dump(arg):
     if arg.get('uncompress'):
         if filename is None:
             filename = arg.get('filename') + '.tar.gz'
-        cmd = os.system(f'cd /upw_data && tar -xvf {filename}')
-        os.system(cmd)
+        os.system(f'cd /upw_data && tar -xvf {filename}')
