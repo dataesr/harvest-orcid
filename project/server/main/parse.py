@@ -75,33 +75,48 @@ def parse_notice(notice_path, base_path, dump_year, verbose = False):
     
     is_fr = False
     is_fr_present = False
+    fr_reasons_present = []
     fr_reasons = []
     if isinstance(current_address, str) and current_address.lower() in FRENCH_ALPHA2:
         is_fr = True
         is_fr_present = True
+        fr_reasons_present.append("address")
         fr_reasons.append("address")
 
     for a in res.get('employment_present', []):
         if a.get('country') in FRENCH_ALPHA2:
             is_fr = True
             is_fr_present = True
+            fr_reasons_present.append('employment')
             fr_reasons.append('employment')
     
     for a in res.get('education_present', []):
         if a.get('country') in FRENCH_ALPHA2:
             is_fr = True
             is_fr_present = True
+            fr_reasons_present.append('education')
             fr_reasons.append('education')
     
-    for a in res.get('employment_other', []) + res.get('education_other', []):
+    for a in res.get('employment_other', []):
         if a.get('country') in FRENCH_ALPHA2:
             is_fr = True
+            fr_reasons.append('employment')
+    
+    for a in res.get('education_other', []):
+        if a.get('country') in FRENCH_ALPHA2:
+            is_fr = True
+            fr_reasons.append('education')
+    
     fr_reasons = list(set(fr_reasons)) 
     fr_reasons.sort()
 
     res['fr_reasons'] = fr_reasons
+    res['fr_reasons_concat'] = ';'.join(fr_reasons)
     res['is_fr'] = is_fr
+
     res['is_fr_present'] = is_fr_present
+    res['fr_reasons_present'] = fr_reasons_present
+    res['fr_reasons_present_concat'] = ';'.join(fr_reasons_present)
     return res
 
 def parse_date(x):
