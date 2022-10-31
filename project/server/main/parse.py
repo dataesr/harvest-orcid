@@ -62,7 +62,7 @@ def parse_notice(notice_path, base_path, dump_year, verbose = False):
     country = soup.find("address:country")
     if country:
         current_address = country.text
-        res['current_address_country'] = current_address
+        res['current_address_country'] = current_address.lower()
        
     employments_elt = soup.find("activities:employments")
     if employments_elt:
@@ -110,14 +110,24 @@ def parse_notice(notice_path, base_path, dump_year, verbose = False):
     fr_reasons = list(set(fr_reasons)) 
     fr_reasons.sort()
 
+    res['is_fr'] = is_fr
     res['fr_reasons'] = fr_reasons
     res['fr_reasons_concat'] = ';'.join(fr_reasons)
-    res['is_fr'] = is_fr
+    res['fr_reasons_main'] = get_main_reason(res['fr_reasons_concat'])
+    
+    fr_reasons_present = list(set(fr_reasons)) 
+    fr_reasons_present.sort()
 
     res['is_fr_present'] = is_fr_present
     res['fr_reasons_present'] = fr_reasons_present
     res['fr_reasons_present_concat'] = ';'.join(fr_reasons_present)
+    res['fr_reasons_present_main'] = get_main_reason(res['fr_reasons_present_concat'])
     return res
+
+def get_main_reason(x):
+    for k in ['employment', 'education', 'address']:
+        if k in x:
+            return k
 
 def parse_date(x):
     year, month, day = None, None, None
@@ -152,6 +162,7 @@ def parse_organization(x):
 def parse_activities(x, activity, dump_year):
     dump_date = f'{dump_year}-11-25'
     present, other = [], []
+    first_year, last_year = '9999', '0000'
     for r in x.find_all(f'{activity}:{activity}-summary'):
         start_date_elt = r.find(f'common:start-date')
         end_date_elt = r.find(f'common:end-date')
@@ -169,13 +180,22 @@ def parse_activities(x, activity, dump_year):
             if start_date:
                 org['start_date'] = start_date
                 org['start_year'] = start_date[0:4]
+                if org['start_year']<first_year:
+                    first_year = org['start_year']
             if end_date:
                 org['end_date'] = end_date
                 org['end_year'] = end_date[0:4]
+                if org['end_year'] > last_year:
+                    last_year = org['end_year']
         if is_current:
             if org not in present:
                 present.append(org)
         else:
             if org not in other:
                 other.append(org)
-    return {f'{activity}_present': present, f'{activity}_other': other}
+    ans = {f'{activity}_present': present, f'{activity}_other': other}
+    if first_year != '9999':
+        ans[f'first_{activity}_year'] = first_year
+    if last_year != '0000':
+        ans[f'last_{activity}_year'] = last_year
+    return ans
