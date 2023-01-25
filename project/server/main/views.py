@@ -8,6 +8,8 @@ from project.server.main.tasks import create_task_dois, create_task_public_dump,
 from project.server.main.utils_swift import download_object
 from project.server.main.utils import get_orcid_prefix
 from project.server.main.parse import parse_all
+from project.server.main.hal import get_data_from_hal
+from project.server.main.idref import get_data_from_idref
 
 main_blueprint = Blueprint("main", __name__,)
 from project.server.main.logger import get_logger
@@ -20,6 +22,13 @@ MOUNTED_VOLUME = '/upw_data/'
 def home():
     return render_template("main/home.html")
 
+@main_blueprint.route("/hal_idref", methods=["POST"])
+def run_task_hal_idref():
+    args = request.get_json(force=True)
+    get_data_from_hal()
+    get_data_from_idref()
+    response_object = {"status": "ok"}
+    return jsonify(response_object)
 
 @main_blueprint.route("/public_dump", methods=["POST"])
 def run_task_public_dump():

@@ -1,4 +1,5 @@
 import pandas as pd
+import pickle
 import bs4
 from bs4 import BeautifulSoup
 import os
@@ -9,25 +10,29 @@ from project.server.main.logger import get_logger
 
 logger = get_logger(__name__)
 
+#debug
+dump_year=2022
+base_path='/upw_data//ORCID_2022_10_summaries/584/'
+notice_path='0000-0003-1353-5584.xml'
+
 FRENCH_ALPHA2 = ['fr', 'gp', 'gf', 'mq', 're', 'yt', 'pm', 'mf', 'bl', 'wf', 'tf', 'nc', 'pf']
+
+orcid_idref = pickle.load(open('/upw_data/orcid_idref_dict.pkl', 'rb'))
+orcid_hal = pickle.load(open('/upw_data/orcid_hal_dict.pkl', 'rb'))
 
 def parse_all(base_path, dump_year, filter_fr = True):
     logger.debug(f'parsing {base_path} files')
     orcids_info = []
     ix = 0
     for notice in os.listdir(base_path):
-        try:
-            parsed = parse_notice(notice, base_path, dump_year)
-            is_fr =  parsed['is_fr']
-            if filter_fr and not is_fr:
-                continue
-            if is_fr:
-                logger.debug(parsed)
-            orcids_info.append(parsed)
-            ix += 1
-        except:
-            pass
-            #logger.debug("error reading "+notice)
+        parsed = parse_notice(notice, base_path, dump_year)
+        is_fr =  parsed['is_fr']
+        if filter_fr and not is_fr:
+            continue
+        #if is_fr:
+        #    logger.debug(parsed)
+        orcids_info.append(parsed)
+        ix += 1
     df = pd.DataFrame(orcids_info)
     filename = base_path.split('/')[-2]
     logger.debug(f'{len(orcids_info)} french orcids in {filename}')
@@ -43,10 +48,65 @@ def parse_notice(notice_path, base_path, dump_year, verbose = False):
     res = {} 
     soup = get_soup(notice_path, base_path)
     orcid = notice_path.split('.')[0]
-    res['orcid'] = orcid 
-    creation_date = soup.find("history:submission-date").text[0:10]
-    res['creation_date'] = creation_date
-    res['creation_year'] = creation_date[0:4]
+    res['orcid'] = orcid
+    # data from ABES
+    if orcid in orcid_idref:
+        res['idref_abes'] = orcid_idref[orcid]['idref']
+        res['has_idref_abes'] = True
+        if 'id_hal_s' in orcid_idref[orcid] and isinstance(orcid_idref[orcid]['id_hal_s'], str):
+            res['id_hal_abes'] = orcid_idref[orcid]['id_hal_s']
+            res['has_id_hal_abes'] = True
+        else:
+            res['has_id_hal_abes'] = False
+    else:
+        res['has_idref_abes'] = False
+        res['has_id_hal_abes'] = False
+    # data from HAL
+    if orcid in orcid_hal:
+        res['id_hal_aurehal'] = orcid_hal[orcid]['id_hal_s']
+        res['has_id_hal_aurehal'] = True
+        if 'idref' in orcid_hal[orcid] and isinstance(orcid_hal[orcid]['idref'], str):
+            res['idref_aurehal'] = orcid_hal[orcid]['idref']
+            res['has_idref_aurehal'] = True
+        else:
+            res['has_idref_aurehal'] = False
+    else:
+        res['has_id_hal_aurehal'] = False
+        res['has_idref_aurehal'] = False
+    if res['has_id_hal_aurehal'] and res['has_id_hal_abes']:
+        res['same_id_hal'] = (res['id_hal_abes'] == res['id_hal_aurehal'])
+    else:
+        res['same_id_hal'] = None
+    if res['has_idref_abes'] and res['has_idref_aurehal']:
+        res['same_idref'] = (res['idref_aurehal'] == res['idref_abes'])
+    else:
+        res['same_idref'] = None
+
+    try:
+        creation_date = soup.find("history:submission-date").text[0:10]
+        res['creation_date'] = creation_date
+        res['creation_year'] = creation_date[0:4]
+    except:
+        #logger.debug(f'no history:submission-date for {orcid}')
+        pass
+
+    try:
+        last_modified_date = soup.find("common:last-modified-date").text[0:10]
+        res['last_modified_date'] = last_modified_date
+        res['active'] = int(dump_year) - int(last_modified_date[0:4]) <= 1 # active if last modified current year or year before
+    except:
+        #logger.debug(f'no common:last-modified-date for {orcid}')
+        pass
+    
+    try:
+        for email_elt in soup.find_all('email:email'):
+            if '@' in email_elt.get_text():
+                email = email_elt.get_text()
+                email_domain = email.split('@')[1]
+                res['email_domain'] = email_domain
+    except:
+        pass
+
     first_name, last_name, current_address = None, None, None
     
     name1 = soup.find("personal-details:given-names")
@@ -83,12 +143,25 @@ def parse_notice(notice_path, base_path, dump_year, verbose = False):
         fr_reasons_present.append("address")
         fr_reasons.append("address")
 
+    current_employment_fr_has_id_types = None
+    current_employment_fr_has_id = None
+    current_employment_fr_id = []
+    current_employment_fr_id_types = []
     for a in res.get('employment_present', []):
         if a.get('country') in FRENCH_ALPHA2:
+            current_employment_fr_has_id = False
             is_fr = True
             is_fr_present = True
             fr_reasons_present.append('employment')
             fr_reasons.append('employment')
+            current_employment_fr_id_types = [f.lower().strip() for f in a.get('disambiguation_sources', [])]
+            current_employment_fr_id = a.get('disambiguation_ids', [])
+            for f in ['ror', 'grid']:
+                if f in current_employment_fr_id_types:
+                    current_employment_fr_has_id = True
+    res['current_employment_fr_id_types'] = current_employment_fr_id_types
+    res['current_employment_fr_id'] = current_employment_fr_id
+    res['current_employment_fr_has_id'] = current_employment_fr_has_id
     
     for a in res.get('education_present', []):
         if a.get('country') in FRENCH_ALPHA2:
@@ -106,6 +179,12 @@ def parse_notice(notice_path, base_path, dump_year, verbose = False):
         if a.get('country') in FRENCH_ALPHA2:
             is_fr = True
             fr_reasons.append('education')
+
+    if res.get('email_domain', '').lower()[-3:] == '.fr':
+        is_fr = True
+        is_fr_present = True
+        fr_reasons_present.append("email")
+        fr_reasons.append("email")
     
     fr_reasons = list(set(fr_reasons)) 
     fr_reasons.sort()
@@ -122,6 +201,28 @@ def parse_notice(notice_path, base_path, dump_year, verbose = False):
     res['fr_reasons_present'] = fr_reasons_present
     res['fr_reasons_present_concat'] = ';'.join(fr_reasons_present)
     res['fr_reasons_present_main'] = get_main_reason(res['fr_reasons_present_concat'])
+
+    res['has_work_from_hal'] = False
+    res['has_work'] = False
+    works = soup.find_all('work:work-summary')
+    res['nb_works'] = len(works)
+    if works:
+        res['has_work'] = True
+    res['works'] = []
+    for work in works:
+        current_work = {'ids': []}
+        ext_ids = work.find_all('common:external-id')
+        for ext_id in ext_ids:
+            id_type = ext_id.find('common:external-id-type')
+            id_value = ext_id.find('common:external-id-value')
+            if id_type and id_value:
+                current_work['ids'].append({'id_type': id_type.get_text(), 'id_value': id_value.get_text()})
+        source = work.find('common:source-name')
+        if source:
+            current_work['source'] = source.get_text()
+            if current_work['source'].lower().strip() == 'hal':
+                res['has_work_from_hal'] = True
+        res['works'].append(current_work)
     return res
 
 def get_main_reason(x):
@@ -153,10 +254,16 @@ def parse_organization(x):
             res[f] = elt.get_text()
             if f in ['country'] and res[f]:
                 res[f] = res[f].lower()
+    res['disambiguation_sources'] = []
+    res['disambiguation_ids'] = []
     for f in x.find_all('common:disambiguated-organization'):
         source = f.find('common:disambiguation-source').get_text().lower()
         value = f.find('common:disambiguated-organization-identifier').get_text()
+        if source not in res['disambiguation_sources']:
+            res['disambiguation_sources'].append(source)
         res[source] = value
+        if value not in res['disambiguation_ids']:
+            res['disambiguation_ids'].append(value)
     return res
 
 def parse_activities(x, activity, dump_year):

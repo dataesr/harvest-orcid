@@ -20,7 +20,10 @@ def get_date(x):
     try:
         d = parser.parse(x)
     except:
-        d = parser.parse(x[0:8]+'01')
+        try:
+            d = parser.parse(x[0:8]+'01')
+        except:
+            return None
     return d.isoformat()[0:10]
 
 def get_orcid_prefix():
