@@ -26,6 +26,7 @@ init_cmd = f"swift --os-auth-url https://auth.cloud.ovh.net/v3 --auth-version 3 
       --os-region-name GRA"
 conn = None
 
+MOUNTED_VOLUME = '/upw_data/'
 
 def get_connection() -> swiftclient.Connection:
     global conn
@@ -45,6 +46,16 @@ def get_connection() -> swiftclient.Connection:
         )
     return conn
 
+@retry(delay=2, tries=50)
+def download_container(container, skip_download, download_prefix):
+    if skip_download is False:
+        cmd =  init_cmd + f' download {container} -D {MOUNTED_VOLUME}/{container} --skip-identical'
+        if download_prefix:
+            cmd += f" --prefix {download_prefix}"
+        os.system(cmd)
+    if download_prefix:
+        return f'{MOUNTED_VOLUME}/{container}/{download_prefix}'
+    return f'{MOUNTED_VOLUME}/{container}'
 
 @retry(delay=2, tries=50)
 def upload_object(container: str, source: str, target:str) -> str:

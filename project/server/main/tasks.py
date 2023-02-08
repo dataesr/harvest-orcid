@@ -31,13 +31,41 @@ def to_json(input_list, output_file, ix):
                 outfile.write(',\n')
             json.dump(entry, outfile)
 
+def merge_field(a, b):
+    if isinstance(a, str) and not isinstance(b, str):
+        return a
+    if isinstance(b, str) and not isinstance(a, str):
+        return b
+    # priority to the first value
+    return a
+
 def concat_results(dump_year):
     logger.debug('concat all files into one')
     filename = f'/upw_data/ORCID_{dump_year}_10_summaries/results.jsonl'
-    os.system(f'rm -rf {filename}')
+    orcid_data = []
     for prefix in get_orcid_prefix():
-        cmd = f'cat /upw_data/ORCID_{dump_year}_10_summaries/{prefix}/{prefix}.jsonl >> {filename}'
-        os.system(cmd)
+        tmp = pd.read_json(f'/upw_data/ORCID_{dump_year}_10_summaries/{prefix}/{prefix}.jsonl', lines=True)
+        orcid_data.append(tmp)
+    df_orcid = pd.concat(orcid_data)
+    df_abes = pd.read_json('/upw_data/data_abes.jsonl', lines=True)
+    for f in ['has_idref_abes', 'has_id_hal_abes', 'id_hal_abes']:
+        del df_orcid[f]
+    df_final = df_orcid.merge(df_abes, on='idref_abes', how='outer')
+    ix = 0
+    for r in df_final.itertuples():
+        df_final.at[ix, 'orcid'] = merge_field(r.orcid_y, r.orcid_x) 
+        df_final.at[ix, 'first_name'] = merge_field(r.first_name_y, r.first_name_x) 
+        df_final.at[ix, 'last_name'] = merge_field(r.last_name_y, r.last_name_x)
+        ix += 1
+    for f in ['orcid', 'first_name', 'last_name']:
+        del df_final[f'{f}_x']
+        del df_final[f'{f}_y']
+    df_final['has_orcid'] = ~df_final.orcid.isna()
+    df_final['has_these'] = df_final.has_these.fillna(0).astype(bool)
+    for f in ['has_these', 'has_idref_abes', 'has_id_hal_abes', 'has_idref_aurehal', 'has_id_hal_aurehal', 
+            'is_fr', 'is_fr_present', 'has_work', 'has_work_from_hal', 'active', 'same_id_hal', 'same_idref']:
+        df_final[f] = df_final[f].fillna(0).astype(bool)
+    df_final.to_json(filename, lines=True, orient='records')
 
 def import_es(dump_year, index_name):
     input_file = f'/upw_data/ORCID_{dump_year}_10_summaries/results.jsonl'

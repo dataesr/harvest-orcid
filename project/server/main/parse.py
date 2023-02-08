@@ -11,9 +11,11 @@ from project.server.main.logger import get_logger
 logger = get_logger(__name__)
 
 #debug
-dump_year=2022
-base_path='/upw_data//ORCID_2022_10_summaries/584/'
-notice_path='0000-0003-1353-5584.xml'
+def test():
+    dump_year=2022
+    base_path='/upw_data//ORCID_2022_10_summaries/295/'
+    notice_path='0000-0002-9361-5295.xml'
+    return parse_notice(notice_path, base_path, dump_year)
 
 FRENCH_ALPHA2 = ['fr', 'gp', 'gf', 'mq', 're', 'yt', 'pm', 'mf', 'bl', 'wf', 'tf', 'nc', 'pf']
 
@@ -49,6 +51,7 @@ def parse_notice(notice_path, base_path, dump_year, verbose = False):
     soup = get_soup(notice_path, base_path)
     orcid = notice_path.split('.')[0]
     res['orcid'] = orcid
+
     # data from ABES
     if orcid in orcid_idref:
         res['idref_abes'] = orcid_idref[orcid]['idref']
@@ -118,6 +121,8 @@ def parse_notice(notice_path, base_path, dump_year, verbose = False):
     if name2:
         last_name = name2.text
         res['last_name'] = last_name
+
+    full_name = f'{first_name} {last_name}'
     
     country = soup.find("address:country")
     if country:
@@ -222,6 +227,12 @@ def parse_notice(notice_path, base_path, dump_year, verbose = False):
             current_work['source'] = source.get_text()
             if current_work['source'].lower().strip() == 'hal':
                 res['has_work_from_hal'] = True
+            elif current_work['source'].lower().strip() == full_name.lower().strip():
+                current_work['source'] = 'author'
+            elif len(current_work['source'].strip()) < 1:
+                current_work['source'] = 'no source'
+        else:
+            current_work['source'] = 'no source'
         res['works'].append(current_work)
     return res
 

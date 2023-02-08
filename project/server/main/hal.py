@@ -30,7 +30,7 @@ def get_data_from_hal():
             orcid = orcid.split('/')[-1]
             if orcid[0:2] != '00':
                 continue
-            new_elt = {}
+            new_elt = {'orcid': orcid}
             if e.get('idHal_s'):
                 new_elt['id_hal_s'] = e['idHal_s']
             if e.get('idrefId_s'):
