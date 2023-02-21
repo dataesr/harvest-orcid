@@ -10,6 +10,7 @@ from project.server.main.utils import get_orcid_prefix
 from project.server.main.parse import parse_all
 from project.server.main.hal import get_data_from_hal
 from project.server.main.idref import get_data_from_idref
+from project.server.main.diaspora.detect import diaspora_these
 
 main_blueprint = Blueprint("main", __name__,)
 from project.server.main.logger import get_logger
@@ -21,6 +22,14 @@ MOUNTED_VOLUME = '/upw_data/'
 @main_blueprint.route("/", methods=["GET"])
 def home():
     return render_template("main/home.html")
+
+@main_blueprint.route("/diaspora", methods=["POST"])
+def run_task_diaspora():
+    args = request.get_json(force=True)
+    year = args.get('year')
+    diaspora_these(year)    
+    response_object = {"status": "ok"}
+    return jsonify(response_object)
 
 @main_blueprint.route("/hal_idref", methods=["POST"])
 def run_task_hal_idref():

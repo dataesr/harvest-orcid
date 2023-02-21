@@ -48,7 +48,8 @@ def get_these_data(snapshot_date):
                         french_doctors_dict[idref] = {
                                 'idref_abes': idref,
                                 'has_these': True,
-                                'theses_id': [], 'first_these_year': 9999, 'first_these_discipline': 'other', 'nb_theses': 0
+                                'theses_id': [], 'first_these_year': 9999, 'first_these_discipline': 'other', 'first_these_affiliations': [], 
+                                'nb_theses': 0
                                 }
                         for f in ['first_name', 'last_name']:
                             if isinstance(a.get(f), str):
@@ -59,6 +60,8 @@ def get_these_data(snapshot_date):
                         french_doctors_dict[idref]['first_these_year'] = min(french_doctors_dict[idref]['first_these_year'], e.year)
                     if isinstance(e.classifications, list) and e.year == french_doctors_dict[idref]['first_these_year']:
                         french_doctors_dict[idref]['first_these_discipline'] = get_classification_dewey(e.classifications)
+                    if isinstance(e.affiliations, list) and e.year == french_doctors_dict[idref]['first_these_year']:
+                        french_doctors_dict[idref]['first_these_affiliations'] = e.affiliations
                     french_doctors_dict[idref]['nb_theses'] = len(french_doctors_dict[idref]['theses_id'])
     nb_doctors = len(french_doctors_dict)
     logger.debug(f'{nb_doctors} personnes avec un idref et un doctorat soutenu ont été identifées.')
