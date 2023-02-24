@@ -10,7 +10,7 @@ from project.server.main.utils import get_orcid_prefix
 from project.server.main.parse import parse_all
 from project.server.main.hal import get_data_from_hal
 from project.server.main.idref import get_data_from_idref
-from project.server.main.diaspora.detect import diaspora_these
+from project.server.main.diaspora.detect import diaspora_these, diaspora_x
 
 main_blueprint = Blueprint("main", __name__,)
 from project.server.main.logger import get_logger
@@ -26,8 +26,11 @@ def home():
 @main_blueprint.route("/diaspora", methods=["POST"])
 def run_task_diaspora():
     args = request.get_json(force=True)
-    year = args.get('year')
-    diaspora_these(year)    
+    if args.get('type') == 'these':
+        year = args.get('year')
+        diaspora_these(year)
+    elif args.get('type') == 'x':
+        diaspora_x()
     response_object = {"status": "ok"}
     return jsonify(response_object)
 
