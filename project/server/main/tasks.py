@@ -7,7 +7,7 @@ import json
 import pandas as pd
 from urllib import parse
 from project.server.main.utils_swift import upload_object
-from project.server.main.utils import get_orcid_prefix
+from project.server.main.utils import get_orcid_prefix, download_file
 from project.server.main.public_dump import download_dump
 from project.server.main.elastic import reset_index
 from project.server.main.logger import get_logger
@@ -114,8 +114,8 @@ def create_task_dois(arg):
 def create_task_public_dump(arg):
     dump_year = arg.get('dump_year')
     filename=None
-    if arg.get('download'):
-        filename = download_dump(dump_year)
+    if arg.get('download') and arg.get('download_url'):
+        filename = download_file(arg.get('download_url'))
         filename = filename.split('/')[-1]
     if arg.get('uncompress'):
         if filename is None:

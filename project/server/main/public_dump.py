@@ -10,6 +10,7 @@ logger = get_logger(__name__)
 def get_figshare_url(dump_year):
     df = pd.read_csv('urls.csv', sep=';')
     url = df[df.year==dump_year].url.values[0]
+    logger.debug(f'url = {url}')
     r = requests.get(url)
     soup = BeautifulSoup(r.text, 'lxml')
     for b in soup.find_all('div'):
