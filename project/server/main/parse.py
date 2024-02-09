@@ -96,7 +96,7 @@ def parse_notice(notice_path, base_path, dump_year, verbose = False):
     try:
         last_modified_date = soup.find("common:last-modified-date").text[0:10]
         res['last_modified_date'] = last_modified_date
-        res['active'] = int(dump_year) - int(last_modified_date[0:4]) <= 1 # active if last modified current year or year before
+        res['active'] = int(dump_year) - int(last_modified_date[0:4]) < 3 # active if last modified within 3 years
     except:
         #logger.debug(f'no common:last-modified-date for {orcid}')
         pass
